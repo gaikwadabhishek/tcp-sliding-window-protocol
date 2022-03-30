@@ -1,16 +1,19 @@
 import socket
 
-HOST = "172.20.10.2"  # Standard loopback interface address (localhost)
-PORT = 50054  # Port to listen on (non-privileged ports are > 1023)
+HOST = "localhost"  # Standard loopback interface address (localhost)
+PORT = 4322  # Port to listen on (non-privileged ports are > 1023)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind((HOST, PORT))
     s.listen()
     conn, addr = s.accept()
     with conn:
-        print(f"Connected by {addr}")
         while True:
-            data = conn.recv(1024)
+            data = conn.recv(1024).decode('utf=8')
+            # import pdb; pdb.set_trace()
             if not data:
                 break
-            conn.sendall(data)
+            if data == 'network':
+                conn.sendall(b'SUCCESS')
+            else:
+                conn.sendall(data.encode('utf-8'))

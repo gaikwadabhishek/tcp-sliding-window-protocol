@@ -30,20 +30,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             else:
                 print("few packets failed:", failed_packets)
                 window_size = 1        
-            
-            #time.sleep(5)    
         s.close()
-
-        # for i in range(NUMBER_OF_PACKETS):
-        #     s.sendall(str(i).encode('utf-8'))
-        #     data = s.recv(1024).decode('utf-8')
-        #     if not data:
-        #         break
-        #     if int(data) == i:
-        #         print("Found correct ack")
-        #         continue
-        #     else:
-        #         print("Missing some acks, exiting")
-        #         break
-
 print("finished")

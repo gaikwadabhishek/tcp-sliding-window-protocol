@@ -10,6 +10,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     with conn:
         while True:
             data = conn.recv(1024).decode('utf=8')
+            print(data)
             if not data:
                 break
             if data == 'network':

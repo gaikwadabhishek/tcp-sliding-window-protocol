@@ -7,9 +7,25 @@ HOST = "localhost"  # The server's hostname or IP address
 PORT = 50051  # The port used by the server
 
 
-def send_packets(packets):
+resume_process = threading.Event()
+acks_recvd = True
+
+
+def send_packets(s, packets):
     for packet in packets:
         s.send(str(packet).encode("utf-8"))
+
+
+def receive_packets(s, packets):
+    global acks_recvd
+    while True:
+        packets = set(packets)
+        data = int(s.recv(1024).decode('utf-8'))
+        packets.discard(data)
+        if not packets:
+            acks_recvd = True
+            resume_process.set()
+            return
 
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -25,19 +41,15 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 window_size = NUMBER_OF_PACKETS - i + 1
             sent_packets = list(range(i, i + window_size))
             print("Sending packets: ", sent_packets)
-            thread = threading.Thread(target=send_packets, args=[sent_packets])
+            acks_recvd = False
+            thread = threading.Thread(target=send_packets, args=[s, sent_packets])
             thread.start()
-            data = s.recv(1024).decode('utf-8')
-            if not data:
-                break
-            print("Received: ", data)
-            received_packets = [int(d) for d in data.split(",")]
-            failed_packets = [x for x in sent_packets if x not in received_packets]
-            if len(failed_packets) == 0:
+            receive_packets(s, sent_packets)
+            resume_process.wait(timeout=10)
+            if acks_recvd:
                 i += window_size
-                window_size *= 2
+                window_size *= 2 
             else:
-                print("few packets failed:", failed_packets)
-                window_size = 1        
+                window_size = 1    
         s.close()
 print("finished")

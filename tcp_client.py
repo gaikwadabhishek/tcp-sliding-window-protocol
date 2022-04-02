@@ -7,16 +7,10 @@ HOST = "localhost"  # The server's hostname or IP address
 PORT = 50051  # The port used by the server
 
 
-resume_process = threading.Event()
 acks_recvd = True
 
 
-def send_packets(s, packets):
-    for packet in packets:
-        s.send(str(packet).encode("utf-8"))
-
-
-def receive_packets(s, packets):
+def receive_packets(s, packets, resume_process):
     global acks_recvd
     while True:
         packets = set(packets)
@@ -29,6 +23,7 @@ def receive_packets(s, packets):
 
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    resume_process = threading.Event()
     s.connect((HOST, PORT))
     s.sendall(b"network")
     data = s.recv(1024)
@@ -42,9 +37,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             sent_packets = list(range(i, i + window_size))
             print("Sending packets: ", sent_packets)
             acks_recvd = False
-            thread = threading.Thread(target=send_packets, args=[s, sent_packets])
+            for packet in sent_packets:
+                s.send(str(packet).encode("utf-8"))
+            thread = threading.Thread(target=receive_packets, args=[s, sent_packets, resume_process])
             thread.start()
-            receive_packets(s, sent_packets)
             resume_process.wait(timeout=10)
             if acks_recvd:
                 i += window_size

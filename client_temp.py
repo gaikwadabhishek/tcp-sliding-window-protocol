@@ -1,14 +1,13 @@
 import _thread
 from random import random
 import time
-import sys
 import socket
-from config import NUMBER_OF_PACKETS
+from config import NUMBER_OF_PACKETS, WRAP_AROUND
 from timer import Timer
 import math
 import tcp
-
-from probabilistic_drop import generate_random_numbers_list
+from datetime import datetime
+from socket import SHUT_RDWR
 
 
 HOST = "localhost"  # The server's hostname or IP address
@@ -20,6 +19,8 @@ mutex = _thread.allocate_lock()
 send_timer = Timer(0.5)
 N = 1 # window size
 total_sent_packets = 0
+total_retransmissions = {1:0,2:0,3:0,4:0}
+retransmissions = {}
 
 def set_window_size(num_packets):
     global send_base
@@ -32,30 +33,30 @@ def send(s):
     global send_timer
     global N
     global total_sent_packets
+    global retransmissions
 
     print('Sending sequence number from 1 to ', NUMBER_OF_PACKETS)
     send_base = 0 
     next_seq_no = 0
-    randomlist = []
-    #randomlist = generate_random_numbers_list(10,NUMBER_OF_PACKETS, 10)
-    #print(randomlist)
-
+    
     # Start the receiver thread
     _thread.start_new_thread(receive, (s,))
 
     congestion_flag = False;
+    retransmissions = {}
     while send_base < NUMBER_OF_PACKETS:
         mutex.acquire()
         while next_seq_no < send_base + N:
-            if next_seq_no not in randomlist:
-                print('Sending packet with seq number ', next_seq_no)
-                tcp.send(s, next_seq_no)
-                #s.send((str(next_seq_no) + ",").encode('utf-8'))
+            print('Sending packet with seq number ', next_seq_no)
+
+            if next_seq_no in retransmissions:
+                retransmissions[next_seq_no] += 1
             else:
-                randomlist.remove(next_seq_no)
+                retransmissions[next_seq_no] = 1
+
+            tcp.send(s, next_seq_no)
             total_sent_packets += 1
             next_seq_no += 1
-            #time.sleep(1)
         # Start the timer
         if not send_timer.running():
             print('Starting timer')
@@ -78,12 +79,13 @@ def send(s):
             congestion_flag = True
         else:
             print('Shifting window')
-            if not congestion_flag:
-                print("window size changed from ", N, "to ", N * 2, " at ", next_seq_no)
-                N *= 2
-            else:
-                print("window size changed from ", N, "to ", N + 1, " at ", next_seq_no)
-                N += 1
+            if N < 10000:
+                if not congestion_flag:
+                    print("window size changed from ", N, "to ", N * 2, " at ", next_seq_no)
+                    N *= 2
+                else:
+                    print("window size changed from ", N, "to ", N + 1, " at ", next_seq_no)
+                    N += 1
             N = set_window_size(NUMBER_OF_PACKETS)
         mutex.release()
 
@@ -96,19 +98,28 @@ def receive(s):
     while True:
         ack_message = tcp.receive(s)
         #ack_message = s.recv(1024).decode('utf-8')
+        print ("ack message received", ack_message)
         incoming_acks= [int(i) for i in ack_message.split(',')[:-1]]
         
         for ack in incoming_acks:
             # If we get an ACK for the first in-flight packet
             print('Got ACK', ack)
-            if (ack >= send_base):
+            wrapped_ack_base = int(send_base % WRAP_AROUND)
+            if (ack >= wrapped_ack_base):
                 mutex.acquire()
-                send_base = ack + 1
+                send_base = send_base + 1
                 print('Base updated', send_base)
                 send_timer.stop()
                 mutex.release()
 
+def calculate_retransmissions():
+    global total_retransmissions
+    for i in retransmissions.keys():
+        total_retransmissions[retransmissions[i]] += 1
+    
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    start = datetime.now()
     s.connect((HOST, PORT))
     s.send(b"network")
     data = s.recv(1024)
@@ -116,6 +127,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f"Received SUCCESS. Sending data")
         send(s)
         print("total packets sent", total_sent_packets)
+    s.shutdown(SHUT_RDWR)
+    calculate_retransmissions()
+    print("total retransmissions")
+    print(total_retransmissions)
+    end = datetime.now()
+    print (end - start)
     s.close()
 
 

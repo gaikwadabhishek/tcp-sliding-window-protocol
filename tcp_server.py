@@ -1,5 +1,6 @@
 import socket
 import tcp
+from config import WRAP_AROUND
 
 HOST = ""  # Standard loopback interface address (localhost)
 PORT = 50051  # Port to listen on (non-privileged ports are > 1023)
@@ -12,7 +13,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     with conn:
         while True:
             
-            data = conn.recv(1024).decode('utf-8')
+            data = conn.recv(100000).decode('utf-8')
             if not data:
                 break
             if data == 'network':
@@ -34,4 +35,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                         #tcp.send(conn, expected_num - 1)
                         conn.sendall(str(expected_num - 1).encode('utf-8'))
                         break
+
+                    if (expected_num >= WRAP_AROUND):
+                        expected_num = 0
                 

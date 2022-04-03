@@ -12,4 +12,4 @@ def generate_random_numbers_list(start, end, percentage):
     print(random_numbers)
     return random_numbers
 
-generate_random_numbers_list(0, 100, 10)
+# generate_random_numbers_list(0, 100, 10)

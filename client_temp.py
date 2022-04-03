@@ -1,5 +1,6 @@
 import _thread
-from random import random
+import os
+from os.path import exists
 import threading
 import time
 import socket
@@ -13,17 +14,25 @@ from datetime import datetime
 
 HOST = "localhost"  # The server's hostname or IP address
 PORT = 50051  # The port used by the server
-cntr = 0.05
+cntr = 1
 
+file_exists = exists("window_time.txt")
+if file_exists:
+    os.remove("window_time.txt")
+file_exists = exists("seqno_time.txt")
+if file_exists:
+    os.remove("seqno_time.txt")
 win_op = open("window_time.txt", "a")
 seq_op = open("seqno_time.txt", "a")
 
 def write_in_file():
     global cntr
-    threading.Timer(0.001, write_in_file).start()
+    global t
+    t = threading.Timer(1, write_in_file)
+    t.start()
     win_op.write(f"{cntr} {N}\n")
     seq_op.write(f"{cntr} {send_base%WRAP_AROUND}\n")
-    cntr += 0.05
+    cntr += 1
 
 # Shared resources across threads
 send_base = 0
@@ -148,27 +157,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print(total_retransmissions)
     end = datetime.now()
     print ("total_time = ", end - start)
+    t.cancel()
     win_op.close()
     seq_op.close()
     s.shutdown(SHUT_RDWR)
     s.close()
-
-
-
-# import matplotlib.pyplot as plt
-  
-# x = []
-# y = []
-# for line in open('seqno_time.txt', 'r'):
-#     lines = [i for i in line.split()]
-#     x.append(lines[0])
-#     y.append(int(lines[1]))
-      
-# plt.title("Students Marks")
-# plt.xlabel('Roll Number')
-# plt.ylabel('Marks')
-# plt.yticks(y)
-# plt.plot(x, y, marker = 'o', c = 'g')
-
-# plt.show()
-

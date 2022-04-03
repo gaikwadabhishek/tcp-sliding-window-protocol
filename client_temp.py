@@ -88,7 +88,7 @@ def send(s):
             congestion_flag = True
         else:
             print('Shifting window')
-            if N < 10000:
+            if N < WRAP_AROUND:
                 if not congestion_flag:
                     print("window size changed from ", N, "to ", N * 2, " at ", next_seq_no)
                     N *= 2
@@ -129,6 +129,9 @@ def calculate_retransmissions():
         else:
             total_retransmissions[retransmissions[i]] = 1
     
+    for i in total_retransmissions.keys():
+        for j in range(1, i):
+            total_retransmissions[j] += total_retransmissions[i]
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     start = datetime.now()

@@ -12,8 +12,13 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     conn, addr = s.accept()
     with conn:
         while True:
-            
-            data = conn.recv(100000).decode('utf-8')
+            list_of_received_messages = []
+            received_message = conn.recv(1024).decode('utf-8')
+            while (len(received_message) == 1024):
+                list_of_received_messages.append(received_message)
+                received_message = conn.recv(1024).decode('utf-8')
+            list_of_received_messages.append(received_message)
+            data = ''.join(list_of_received_messages)
             if not data:
                 break
             if data == 'network':

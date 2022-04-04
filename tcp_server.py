@@ -74,8 +74,9 @@ def main():
 
     # accepting and printing connections
     conn, addr = s.accept()
-    if (printFlag): print(f"Server Address -> {HOST}:{PORT}")
-    if (printFlag): print(f"Client Addess -> {addr[0]}:{addr[1]}")
+    print(f"Receiver IP Address -> {HOST}:{PORT}")
+    print(f"Sender IP Address -> {addr[0]}:{addr[1]}")
+
     while True:
 
         # receive messages from client
@@ -99,16 +100,6 @@ def main():
             # As python drops all packets to a stream, we are seperating our sequence numbers by ",". Generating sequence numbers from received message
             incoming_packets = [int(i) for i in data.split(',')[:-1]]
             
-            received += len(incoming_packets)
-            total_packets_received += len(incoming_packets)
-
-            # calculating good put
-            if received >= 1000:
-                sum_goodput += 1000/(1000+dropped)
-                count_goodput += 1
-                received = received % 1000
-                dropped = 0
-
             for seq_num in incoming_packets:
 
                 cur_seq_no = seq_num #populating graph2
@@ -119,6 +110,8 @@ def main():
                     if (printFlag): print("Sending ack: "+ str(seq_num))
                     expected_num += 1
                     conn.send((str(seq_num) + ",").encode('utf-8'))
+                    received += 1
+                    total_packets_received += 1
 
                 # incorrect sequence number received
                 else:
@@ -126,13 +119,18 @@ def main():
                     dropped += 1
                     total_packets_dropped += 1
                     dropped_seq_no = expected_num #populating graph3
-                    conn.send(str(expected_num - 1).encode('utf-8'))
-                    break
-                    
-                
+                    # conn.send(str(expected_num - 1).encode('utf-8'))
+    
                 # wrapping around the sequence number
                 if (expected_num >= WRAP_AROUND):
                     expected_num = 0
+
+                # calculating good put
+                if received == 1000:
+                    sum_goodput += 1000/(1000+dropped)
+                    count_goodput += 1
+                    received = 0
+                    dropped = 0
 
     print("Average good put is -> ", sum_goodput / count_goodput)
     print(f"Number of packets received: {total_packets_received} and number of packets sent: {total_packets_dropped + total_packets_received}")

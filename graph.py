@@ -10,7 +10,7 @@ for line in open('seqno_time.txt', 'r'):
 plt.title("Sequence numbers over time")
 plt.xlabel('Time in seconds')
 plt.ylabel('Sequence numbers')
-plt.yticks(y)
-plt.plot(x, y, marker = 'o', c = 'g')
+# plt.yticks(y)
+plt.plot(x, y)
 
 plt.show()

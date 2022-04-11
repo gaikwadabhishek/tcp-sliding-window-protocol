@@ -1,18 +1,25 @@
+# CODE SUBMITTED BY AMEYA M. AND ABHISHEK G.
+
+# imports
 import _thread
 import threading
 import time
 import socket
-from config import NUMBER_OF_PACKETS, WRAP_AROUND
 import math
 from socket import SHUT_RDWR
 from datetime import datetime
 from tcp_server import delete_file_if_already_exists
 import random
+from collections import defaultdict
 
+#CONFIGS
+NUMBER_OF_PACKETS = 10000000
+#drop probabilty in percent
+DROP_PROBABILITY = 1
+WRAP_AROUND = 65536
 # IP Addr of Server
 HOST = "localhost"  # The server's hostname or IP address
 PORT = 50051  # The port used by the server
-
 
 # Timer class to handle start, stop and handle timeouts 
 class Timer(object):
@@ -45,35 +52,31 @@ class Timer(object):
 
 
 # variables to populate graph data
-cntr = 1
+counter = 1
 win_op = None
 
 # Shared resources across threads
 send_base = 0
 mutex = _thread.allocate_lock()
-send_timer = Timer(0.2)
+send_timer = Timer(0.01)
 N = 1 # window size
 total_sent_packets = 0
-total_retransmissions = {}
 retransmissions = {}
 printFlag = False
-
+sent_packets = set()
 
 def write_in_file():
-    global cntr
-    global t
-    global win_op
+    global counter, t, win_op
     t = threading.Timer(1, write_in_file)
     t.start()
-    win_op.write(f"{cntr} {N}\n")
-    cntr += 1
+    win_op.write(f"{counter} {N}\n")
+    counter += 1
 
 
 # sending pakcets using socket connection and probablistically dropping packets
 def socket_send(s, next_seq_no):
-    if random.randint(0, 399) > 0:
-        next_seq_no = int(next_seq_no % WRAP_AROUND)
-        s.send((str(next_seq_no) + ",").encode('utf-8'))
+    next_seq_no = int(next_seq_no % WRAP_AROUND)
+    s.send((str(next_seq_no) + ",").encode('utf-8'))
 
 
 # receiving packets
@@ -88,19 +91,37 @@ def socket_receive(s):
     data = ''.join(list_of_received_messages)
     return data
 
-
 # if reached end of total packets, only send remaining packets and not entire window
 def set_window_size(num_packets):
     return min(N, num_packets - send_base)
 
+# count the total number of retransmissions taking place
+def calculate_retransmissions(dropped_packets):
+    global retransmissions
+    for _, val in dropped_packets.items():
+        for i in range(1, val + 1):
+            if i in retransmissions:
+                retransmissions[i] += 1
+            else:
+                retransmissions[i] = 1
+
+# probabilistically drop and store 1 % of the packets
+def probabilistically_drop_packets(start, end, percentage):
+    retransmissions = defaultdict(lambda: 0)
+    if percentage == 0: percentage = 0.0001
+    while start < end:
+        if random.randint(1, 100/percentage) > 1:
+            start += 1
+        else:
+            if start in retransmissions.keys():
+                retransmissions[start] += 1
+            else:
+                retransmissions[start] = 1
+    return retransmissions
+
 # Send thread
 def send(s):
-    global mutex
-    global send_base
-    global send_timer
-    global N
-    global total_sent_packets
-    global retransmissions
+    global mutex, send_base, send_timer, N, total_sent_packets, sent_packets
 
     if (printFlag): print("Sending sequence number from 1 to ", NUMBER_OF_PACKETS)
     send_base = 0 
@@ -110,16 +131,20 @@ def send(s):
     _thread.start_new_thread(receive, (s,))
 
     congestion_flag = False
+    dropped_packets = probabilistically_drop_packets(0, NUMBER_OF_PACKETS, DROP_PROBABILITY)
+    calculate_retransmissions(dropped_packets)
+    sent_packets = set()
 
     while send_base < NUMBER_OF_PACKETS:
         mutex.acquire()
         while next_seq_no < send_base + N:
             if (printFlag): print('Sending packet with seq number ', next_seq_no)
-            if next_seq_no in retransmissions:
-                retransmissions[next_seq_no] += 1
+
+            if dropped_packets[next_seq_no] == 0:
+                socket_send(s, next_seq_no)
             else:
-                retransmissions[next_seq_no] = 1
-            socket_send(s, next_seq_no)
+                dropped_packets[next_seq_no] -= 1
+                    
             total_sent_packets += 1
             next_seq_no += 1
 
@@ -132,7 +157,7 @@ def send(s):
         while send_timer.running() and not send_timer.timeout():
             mutex.release()
             if (printFlag): print('Sleeping')
-            time.sleep(0.05)
+            time.sleep(0.005)
             mutex.acquire()
 
         # Handling timeout
@@ -153,15 +178,13 @@ def send(s):
                     N *= 2
                 else:
                     if (printFlag): print("window size changed from ", N, "to ", N + 1, " at ", next_seq_no)
-                    N += 10
+                    N += 1
             N = set_window_size(NUMBER_OF_PACKETS)
         mutex.release()
 
 # Receive thread
 def receive(s):
-    global mutex
-    global send_base
-    global send_timer
+    global mutex, send_base, send_timer
 
     while True:
         ack_message = socket_receive(s)
@@ -172,25 +195,13 @@ def receive(s):
             # If we get an ACK for the first in-flight packet
             if (printFlag): print('Got ACK', ack)
             wrapped_ack_base = int(send_base % WRAP_AROUND)
-            if (ack >= wrapped_ack_base):
+            if (ack == wrapped_ack_base):
                 mutex.acquire()
                 send_base = send_base + 1
                 if (printFlag): print('Base updated', send_base)
                 send_timer.stop()
                 mutex.release()
 
-# calculating retransmissions
-def calculate_retransmissions():
-    global total_retransmissions
-    for i in retransmissions.keys():
-        if retransmissions[i] in total_retransmissions:
-            total_retransmissions[retransmissions[i]] += 1
-        else:
-            total_retransmissions[retransmissions[i]] = 1
-    
-    for i in total_retransmissions.keys():
-        for j in range(1, i):
-            total_retransmissions[j] += total_retransmissions[i]
 
 def main():
 
@@ -206,25 +217,27 @@ def main():
     # connecting to server and initiating handshake
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
     s.connect((HOST, PORT))
+    # sending "nework" as a part of handshake
     s.send(b"network")
     data = s.recv(1024)
 
+    # expecting "SUCCESS" as part of handshake
     if data.decode("utf-8") == "SUCCESS":
-        print(f"Received SUCCESS. Sending data")
+        if (printFlag): print(f"Received SUCCESS. Sending data")
 
         #start sending sequence numbers 
         send(s)
 
     # printing rubric variables
-    print("total packets sent ->", total_sent_packets)
-    calculate_retransmissions()
-    print("total retransmissions ->")
-    for key, val in total_retransmissions.items():
-        print(key, val)
+    print("Packets Sent\t->\t", total_sent_packets)
+    
+    print("Retransmissions Count")
+    for key, val in retransmissions.items():
+        print(key,"\t->\t",val)
 
     # calculating total program execution time
     end = datetime.now()
-    print ("total_time -> ", end - start)
+    print ("Total Execution Time \t->\t", end - start)
 
     # close and shutdown connections
     t.cancel()

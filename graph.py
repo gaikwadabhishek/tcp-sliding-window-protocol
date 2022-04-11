@@ -1,16 +1,16 @@
 import matplotlib.pyplot as plt
-  
+import numpy as np
 x = []
 y = []
-for line in open('seqno_time.txt', 'r'):
-    lines = [i for i in line.split()]
+for line in open('window_time.txt', 'r'):
+    lines = [int(i) for i in line.split()]
     x.append(lines[0])
     y.append(int(lines[1]))
       
-plt.title("Sequence numbers over time")
-plt.xlabel('Time in seconds')
-plt.ylabel('Sequence numbers')
-# plt.yticks(y)
+plt.title("WINDOW SIZE VS. TIME")
+plt.xlabel('TIME IN SECONDS')
+plt.ylabel('WINDOW SIZE')
+plt.xticks(np.arange(0, 2500, 100))
 plt.plot(x, y)
 
 plt.show()
